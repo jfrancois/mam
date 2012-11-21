@@ -1,0 +1,21 @@
+Authors : Lautaro Dolberg, Jerome Francois, Thomas Engel (first.second@uni.lu)
+Date : 17/08/2012
+All rights reserved
+GPL version 2.0 to be found at: http://www.gnu.org/licenses/gpl-2.0.txt
+2012 University of Luxembourg - Interdisciplinary Centre for Security Reliability and Trust (SnT)
+
+This tool constructs aggregated trees representing DNS - IP address match which can be then analyzed for figuring out the stability of this mapping
+
+
+On the root directory source files are available. 
+-multiAggregator.py contains the main implementation of the tool. Examples of how should be run are available on the EXAMPLE file
+-tree.py implements the data structure used for aggregation
+-feature.py holds the definition and implementation of the features we have evaluated
+-stability_lib holds the functions for calutating stability
+
+Lib Dependencises (to be completed)
+- python-levenshtein
+- python-pygraph
+- python-pygraphviz
+- libgv-python
+- py-editdist

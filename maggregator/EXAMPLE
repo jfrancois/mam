@@ -1,0 +1,72 @@
+#The followin file includes examples for some of the implemented features. 
+
+#NETFLOW
+#Example for netflow records. Using a time window of 5 seconds. The regular expresion groups timestamp, source ip addres, destination ip addres. Aggregation threshold is set in 1%. Using maximum size of nodes 500 and LRU stategy
+./multiAggregator.py -w 5 -r "([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)" -f "app value timestamp src_ip dst_ip" -d "app src_ip dst_ip" -t "Application IPv4Address IPv4Address" -a 1 -n packets -i test.txt  -m 500 -S LRU
+
+#test.txt
+#Port,Proto Bytes   Timestamp           Source      Destination
+110,TCP     1455    2010-02-24 02:20:00 192.168.4.2 92.250.220.81
+110,TCP     1564    2010-02-24 02:20:10 192.168.5.1 92.250.220.81
+80,TCP      1488    2010-02-24 02:20:12 192.168.4.1 92.250.220.82
+80,TCP      1491    2010-02-24 02:20:15 192.168.6.2 92.250.220.82
+
+
+#GPS
+#Example for Geographic Located Data based on netflow. Using a time window of 5 seconds. The regular expresion groups timestamp, GPS coordinates, source ip address, destination ip address. Aggregation threshold is set in 1%.
+./multiAggregator.py -w 5 -r "([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)" -f "app value timestamp src_ip dst_ip x y" -d "app src_ip dst_ip x y" -t "Application IPv4Address IPv4Address Range2 Range2" -a 5 -i application_ipv4_gps_traffic.txt -n packets
+
+#test.txt
+#Port,Proto Bytes   Timestamp  Source      Destination Latitude   Longitude
+220,TCP     1       1328543522 192.168.6.3 192.168.4.7 33.6475632 -122.5718501
+3535,TCP    1       1328543522 192.168.0.7 192.168.4.8 33.5884231 -122.475896
+2525,TCP    1       1328543522 192.168.4.8 192.168.1.8 33.408853 -122.808546
+5432,TCP    1       1328543522 192.168.4.7 192.168.1.7 33.1330840 -122.8790203
+5432,TCP    1       1328543522 192.168.1.8 192.168.0.1 33.3787217 -122.1311268
+
+#SIP
+#Example for aggregation on SIP messages and IP Address. Using a time window of 5 seconds. The regular expresion groups timestamp, volume, source ip address and SIP Message. Aggregation threshold is set in 5%.
+./multiAggregator.py -w 5 -r "([^\s]*)\s+([^\s]*)\s+([^\s]*)\s+([^\s]*)" -f "app value timestamp src_ip dst_ip x y" -d "app src_ip dst_ip x y" -t "Application IPv4Address IPv4Address Range2 Range2" -a 5 -i application_ipv4_gps_traffic.txt -n packets
+#Port,Proto Bytes   Timestamp           Source          Destination     Message
+5060,UDP    618     2008-06-13 18:44:09 3.53.155.5      3.53.155.216    REQUEST,REGISTER
+5060,UDP    507     2008-06-13 18:44:09 3.53.155.216    3.53.155.5      STATUS,100
+5060,UDP    579     2008-06-13 18:44:09 3.53.155.216    3.53.155.5      STATUS,200
+5060,UDP    555     2008-06-13 18:44:15 3.53.155.216    3.53.155.5      REQUEST,NOTIFY
+
+Options:
+  -h, --help            show this help message and exit
+  -i FILE, --input=FILE
+                        input file (txt flow file)
+  -w WINDOW, --window-size=WINDOW
+                        window size in seconds
+  -r REG_EXP, --reg-exp=REG_EXP
+                        regular expression to extract flow information
+  -f FIELDS, --fields=FIELDS
+                        fields naming corresponding to the regular expression,
+                        have to be split by a space character and HAS TO
+                        INCLUDE value and timestamp
+  -d DIM, --dimensions=DIM
+                        dimension to use for the radix tree, have to be split
+                        by a space character and correspond to the field
+                        naming
+  -t TYPES, --type-dimension=TYPES
+                        types of dimension
+  -c CUT, --cut=CUT     threshold (%) under which removing a node is not
+                        allowed during the construction(it's include the
+                        parents values)
+  -a AGGREGATE, --aggregate=AGGREGATE
+                        threshold (%) for the aggregation
+  -l FILE, --log-file=FILE
+                        log file containing the attacks
+  -s SPLIT, --split=SPLIT
+                        percentage of data used for training
+  -g TYPE_AGGR, --type-aggregation=TYPE_AGGR
+                        type of the aggregation for nodes
+  -n NAMEFILE, --name=NAMEFILE
+                        suffix for name of file results
+  -S STRATEGY, --strategy=STRATEGY
+                        stratrgy for selecting nodes to aggregate
+  -m MAX_NODES, --max-nodes=MAX_NODES
+                        max size of tree
+
+
