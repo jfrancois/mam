@@ -13,6 +13,15 @@ import time
 import pickle
 import random
 import shelve
+import inspect
+import os
+
+sys.path.append(os.path.dirname(__file__)+'/features')
+
+import feature
+from feature import *
+from ipv6addr import IPv6Address
+
 
 #import EntropyInterval
 
@@ -35,8 +44,8 @@ try:
     
 except:
     print "No pygraph found"
-    
-from feature import *
+
+        
 from tree import Tree,Node,NumericalValueNode
 #,list_node
 
@@ -420,6 +429,7 @@ def update_tree(tree,dict_fields,dict_dim,aggr):
     key = {}
     for k,v in dict_fields.items():
         if k in dict_dim.keys():
+  
             key[k] = globals()[dict_dim[k]].create_final_value(v)
             
     #aggregate here in order to keep a fixed size tree
@@ -581,9 +591,8 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
     current_window = 0
     
     for line in lines:
-        #print line
+   
         find = re.search(options.reg_exp,line)
-        #print find
         if find:
             dict_fields = {}
             for i in range(len(fields)):
@@ -665,7 +674,9 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
                 res_t.set_root(res_t.get_root().post_aggregate())
                 res_t.aggregate(options.aggregate,res_c)
             
-            #print res_t.display_preaggregate(res_c)
+                
+            
+            print res_t.display_preaggregate(res_c)
             fwrite = open("%s.%s.dot"%(options.input.replace(".txt",''),i),"w")
             fwrite.write(res_t.dot_preaggregate(res_c))
             fwrite.close()
@@ -688,12 +699,13 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
                 try:
                     dot_file = "%s.%s.dot"%(options.input.replace(".txt",''),i)
                     print dot_file
-                    print type(dot_file)
                     gvv = gv.read(dot_file)
                     gv.layout(gvv,'dot')
+                    new_file_gv = "%s.%s_%s_%s.png"%(options.input.replace(".txt",''),i,options.aggregate,sname)
                   
-                    list_files.append( options.input.replace(".txt", "_%s_%s%s.png"%(i,options.aggregate,sname) ))
-                    gv.render(gvv,'png',options.input.replace(".txt", "_%s_%s%s.png"%(i,options.aggregate,sname) ))
+                    list_files.append(new_file_gv)
+                    
+                    gv.render(gvv,'png',new_file_gv)
                 except Exception, e:
                     print e
                     print "No Rendering"    
@@ -858,6 +870,8 @@ def main_aggregator(lineparser):
     else:
         for i in range(len(dim)):
             dict_dim[dim[i]] = types[i]
+
+            
     res = None
     
     if len(options.strategy) > 0 :         
@@ -871,18 +885,7 @@ def main_aggregator(lineparser):
     else:
         res = build_aggregate_tree(options,args,fields,dim,types,dict_dim)
     return res
-    #Hard-coded dimension for the paper
-    #~ dim_src = ["src_ip"]
-    #~ dim_dst = ["dst_ip"]
-    #~ dict_dim_src = {"src_ip" : "ip_addr"}
-    #~ dict_dim_dst = {"dst_ip" : "ip_addr"}
-    #~ 
-    #~ types = ["ip_addr"]
-    
-    
-            
-     
- 
+
 
 if __name__ == "__main__":
     sys.setrecursionlimit(1000000)

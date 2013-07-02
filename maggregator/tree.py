@@ -230,11 +230,12 @@ class Node:
         
         #Display the current node
         
-        #toDisplay = "["
+        toDisplay = "["
         for k in self.get_tree().get_dim():
             #toDisplay = toDisplay + str(k) +"-->"+Types.display(self.get_key()[k],v)+" "
-            toDisplay = toDisplay + self.get_key()[k].display()+" "
-        #toDisplay = toDisplay + "]"
+            toDisplay = toDisplay + str(k) +"-->"+self.get_key()[k].display()+" "
+            
+        toDisplay = toDisplay + "]"
         toDisplay += " "+str(int(percent))+" ("+"%.2f" % (100.0*percent/total)+"% / "+"%.2f" % (100.0*percent2/total)+"%)  "#+ "%.2f" % (100.0*self.get_aggr_value()/total)+"%"
         
         indent = "   "*level
@@ -408,7 +409,7 @@ class Node:
             return 0.0, [], [],0.0
             
     def aggregate(self,threshold,total,level=0,keep_root=False):
-        #print "a"
+
         if total == 0:
             print "Total : 0"
         try:

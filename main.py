@@ -6,14 +6,19 @@ import inspect
 import image_viewer
 from optparse import OptionParser
 import sys
+
 try: 
     from maggregator.src.multiAggregator import main_aggregator
-    from maggregator.src import feature
+    import features
+    from features import *
 except:
     sys.path.append(".")
+    sys.path.append('./maggregator')
     import maggregator
     from maggregator.multiAggregator import main_aggregator
-    from maggregator import feature
+    import features
+    from features import *
+  
 '''
 app = wx.App(False)  # Create a new app, don't redirect stdout/stderr to a window.
 frame = wx.Frame(None, wx.ID_ANY, "Hello World",size=(200,100)) # A Frame is a top-level window.
@@ -29,7 +34,14 @@ class MainWindow(wx.Frame):
         wx.Frame.__init__(self, parent, title=title, size=(800,600))
         #0s elf.control = wx.TextCtrl(self, style=wx.TE_MULTILINE)
         self.CreateStatusBar() # A Statusbar in the bottom of the window
-        self.features = inspect.getmembers(feature, inspect.isclass)
+        
+        self.features = []
+        for mod in inspect.getmembers(features,inspect.ismodule):
+            for cla in inspect.getmembers(mod[1],inspect.isclass):
+                if issubclass(cla[1],features.feature.Feature):
+                    self.features.append((cla[0],cla[1]))
+       
+        #self.features = inspect.getmembers(feature, inspect.isclass)
         # Setting up the menu.
         filemenu= wx.Menu()
         helpmenu= wx.Menu()
