@@ -16,6 +16,9 @@ import shelve
 import inspect
 import os
 
+import ipath
+import similarity_lib
+
 sys.path.append(os.path.dirname(__file__)+'/features')
 
 import feature
@@ -48,7 +51,6 @@ except:
         
 from tree import Tree,Node,NumericalValueNode
 #,list_node
-
 
 VALUE="value"
 
@@ -423,13 +425,11 @@ def test():
     test_node()
 
 def update_tree(tree,dict_fields,dict_dim,aggr):
-    
-    
     #Create the key corresponding to the entry
+    #print tree, dict_fields
     key = {}
     for k,v in dict_fields.items():
         if k in dict_dim.keys():
-  
             key[k] = globals()[dict_dim[k]].create_final_value(v)
             
     #aggregate here in order to keep a fixed size tree
@@ -447,42 +447,47 @@ def update_tree(tree,dict_fields,dict_dim,aggr):
 def aggregate_LRU(tree,max_nodes,alpha,age=-1):
         import copy
         nodes = tree.preorder()
+
         nodes = sorted(nodes,key=lambda x: x.get_uses())[0:100]
-        nodes = sorted(nodes,key=lambda x: x.get_age(),reverse=True)
+        #nodes = sorted(nodes,key=lambda x: x.get_age(),reverse=True)
         candidate = nodes[0]
         nodes = nodes[1:]
-        
+       
         #go 2 levels up....
-        try:
-            c_root = candidate.get_parent().get_parent()
-        except:
-            try:
-                c_root = candidate.get_parent()
-            except:
-                c_root = candidate
-            
+        c_root = candidate.get_parent().get_parent() if candidate.get_parent() != None else candidate.get_parent()
+        if c_root == None:
+            c_root = candidate
+
         count = sum((n.get_value() for n in c_root.preorder()))
         #print len(c_root.preorder())
         while len(nodes) > 0 and count <= 0 :
             candidate = nodes[0]
             nodes = nodes[1:]
             #go 2 levels up....
-            c_root = candidate.get_parent().get_parent()
-            if c_root == None:
-                c_root = candidate.get_parent()
+            c_root = candidate.get_parent().get_parent() if candidate.get_parent() != None else candidate.get_parent()
             if c_root == None:
                 c_root = candidate
+                
+            #~ c_root = candidate.get_parent().get_parent()
+            #~ if c_root == None:
+                #~ c_root = candidate.get_parent()
+            #~ if c_root == None:
+                #~ c_root = candidate
             count = sum((n.get_value() for n in c_root.preorder()))
             
         c_root.aggregate(alpha,count,0)
         #print len(c_root.preorder())
+        
+        #Reconstruct the dimensions of the subtree by adding all necessary internal nodes
         return c_root.post_aggregate()
             
         
-def build_LRU_aggregate_tree(options,args,fields,dim,types,dict_dim):
+def build_LRU_aggregate_tree(options,args,fields,dim,types,dict_dim,from_gui=False):
     def f(x,y):
         new_node = aggregate_LRU(x,options.max_nodes,options.aggregate)
         nodes = x.preorder()
+        
+        #Replace the olfer subtree with the new one after LRU aggregation
         for n in nodes:
             if n.get_key() == new_node.get_key():
                 if new_node.get_parent() !=None:
@@ -491,13 +496,13 @@ def build_LRU_aggregate_tree(options,args,fields,dim,types,dict_dim):
                     break
         return x.get_root()
         
-    return build_aggregate_tree(options,args,fields,dim,types,dict_dim,f,False,True)
+    return build_aggregate_tree(options,args,fields,dim,types,dict_dim,f,False,False,from_gui)
         
-def build_root_aggregate_tree(options,args,fields,dim,types,dict_dim):
+def build_root_aggregate_tree(options,args,fields,dim,types,dict_dim,from_gui=False):
     def f(tree,tc):
         tree.aggregate(options.aggregate,tc)
         return tree.get_root().post_aggregate()    
-    return build_aggregate_tree(options,args,fields,dim,types,dict_dim,f)
+    return build_aggregate_tree(options,args,fields,dim,types,dict_dim,f,False,False,from_gui)
 
 def benchmark_aggregation(options,args,fields,dim,types,dict_dim, otfa = lambda x: x.get_root()):
     
@@ -573,7 +578,7 @@ def benchmark_aggregation(options,args,fields,dim,types,dict_dim, otfa = lambda 
 def build_aggregate_randomized_tree(options,args,fields,dim,types,dict_dim):
     return build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x,y: x.get_root(),randomize=True)
 
-def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x,y: x.get_root(),randomize=False,no_final_aggregation=False):
+def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x,y: x.get_root(),randomize=False,no_final_aggregation=False,from_gui=True):
     
     tree_src = None
     tree_dst = None
@@ -591,15 +596,14 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
     current_window = 0
     
     for line in lines:
-   
+        
         find = re.search(options.reg_exp,line)
+
         if find:
             dict_fields = {}
             for i in range(len(fields)):
                 dict_fields[fields[i]] = find.group(i+1)
-            #print dict_fields
             try:
-                #    print dict_fields["timestamp"]
                 sec = time.mktime(time.strptime(dict_fields["timestamp"],"%Y-%m-%d %H:%M:%S"))
             except:
                 sec = int(dict_fields["timestamp"])
@@ -621,18 +625,24 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
                 total_count = 0.0
                 
                 list_window.append(current_window)
-                
+            #update_tree(tree,dict_fields,dict_dim,options.type_aggr)
+            
+            
             try:    
                 update_tree(tree,dict_fields,dict_dim,options.type_aggr)
+                #print tree,dict_fields,dict_dim,options.type_aggr
             except Exception, e:
                 print e
                 raise
                 tree.set_root(tree.get_root().post_aggregate())
                 update_tree(tree,dict_fields,dict_dim,options.type_aggr)
+            
             total_nodes = len(tree.get_root().preorder())
             if total_nodes > options.max_nodes:
+                
                 tree.set_root(otfa(tree,total_count))
                 tree.set_root(tree.get_root().post_aggregate())
+                
                 #aggregate_LRU(tree,options.max_nodes,options.aggregate,total_count)
             
             #print tree.get_root().preorder()
@@ -645,7 +655,7 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
         list_res.append((tree,total_count))
     
     
-    
+   
     #sys.exit()
     i = 0
     list_files = []
@@ -653,7 +663,60 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
         sname = "_%s" % options.strategy
     else:
         sname = ""
-    storage = shelve.open("chunkstrees.dat")
+        
+    if from_gui:
+        
+        ts = []
+        
+        #Filter out empty tree
+        for (res_t,res_c) in filter(lambda x: x[0]!=None,list_res):
+            ts.append({'tree':res_t, 'res_c':res_c})
+            
+        #Apply aggregation to non empty tree
+        for t in ts:
+            t['tree'].aggregate(options.aggregate,t['res_c']) 
+            
+        agt = [t['tree'] for t in ts ] 
+        pat = [t['tree'].get_root().post_aggregate() for t in ts ]
+        nodes_list = [r.preorder() for r in pat]
+        
+        #matrix of similarities
+        #TODO: compare only consecutive trees to avoid unecessary computations
+        im = similarity_lib.imatrix(nodes_list)
+        
+        #stability of nodes
+        #TODO: compute stability only between consecutive trees to avoid unecessary computations
+        st = similarity_lib.get_st(nodes_list, im)
+        
+        i = 0
+        for tk in st.keys():
+            t = agt[tk]
+            tree_nodes = t.preorder()
+            for n in tree_nodes:
+                n._stability = min(st[tk][tree_nodes.index(n)])
+            #print t.dot_preaggregate(ts[tk]['res_c'],stability_highlight,"Node")
+            
+            fwrite = open("%s.%s.dot"%(options.input.replace(".txt",''),i),"w")
+            fwrite.write(t.dot_preaggregate(ts[i]['res_c'],options.shighlight,options.ahighlight))
+            fwrite.close()
+            try:
+                dot_file = "%s.%s.dot"%(options.input.replace(".txt",''),i)
+                print dot_file
+                
+                gvv = gv.read(dot_file)
+                gv.layout(gvv,'dot')
+              
+                new_file_gv = "%s.%s_%s_%s.png"%(options.input.replace(".txt",''),i,options.aggregate,sname)
+                list_files.append(new_file_gv)
+                gv.render(gvv,'png',new_file_gv)
+            except Exception, e:
+                print e
+                print "No Rendering"
+            i= i +1
+        return (list_res,list_files)
+                
+       
+    #if not gui
     for (res_t,res_c) in list_res:            
         print "-------------------------------"
         print "Total = ",res_c
@@ -666,21 +729,22 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
             
             #res_t.display_aggregate(options.aggregate,res_c)
             k = options.input.split("/")[-1] + ".%s_%s_%s"%(i,options.aggregate,sname)
-            storage[k]= { 'tree': res_t }  
+            #storage[k]= { 'tree': res_t, 'res_c':res_c }  
             pretotal_nodes_before_aggregation = len(tree.get_root().preorder())
+                       
             if not no_final_aggregation:
                 res_t.aggregate(options.aggregate,res_c)
-            if options.strategy != "":
-                res_t.set_root(res_t.get_root().post_aggregate())
-                res_t.aggregate(options.aggregate,res_c)
-            
                 
-            
+            #~ if options.strategy != "":
+                #~ res_t.set_root(res_t.get_root().post_aggregate())
+                #~ res_t.aggregate(options.aggregate,res_c)
+            #~ #print res_c,options.aggregate
             print res_t.display_preaggregate(res_c)
+            
             fwrite = open("%s.%s.dot"%(options.input.replace(".txt",''),i),"w")
-            fwrite.write(res_t.dot_preaggregate(res_c))
+            fwrite.write(res_t.dot_preaggregate(res_c,options.shighlight,options.ahighlight))
             fwrite.close()
-            storage[k]['atree'] = res_t
+            #storage[k]['atree'] = res_t
             if "Range" in options.types: 
                 try:
                     
@@ -699,12 +763,12 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
                 try:
                     dot_file = "%s.%s.dot"%(options.input.replace(".txt",''),i)
                     print dot_file
+
                     gvv = gv.read(dot_file)
                     gv.layout(gvv,'dot')
-                    new_file_gv = "%s.%s_%s_%s.png"%(options.input.replace(".txt",''),i,options.aggregate,sname)
                   
+                    new_file_gv = "%s.%s_%s_%s.png"%(options.input.replace(".txt",''),i,options.aggregate,sname)
                     list_files.append(new_file_gv)
-                    
                     gv.render(gvv,'png',new_file_gv)
                 except Exception, e:
                     print e
@@ -724,7 +788,12 @@ def build_aggregate_tree(options,args,fields,dim,types,dict_dim, otfa = lambda x
             #print res_t.display_preaggregate(res_c)
 
         print "-------------------------------"
-    storage.close()    
+    #storage.close()
+    #trees = [ l[0] for l in list_res if l[0] != None]
+    #nodes_list = [t.preorder() for t in trees]
+    #im = similarity_lib.imatrix(nodes_list)
+    #st = similarity_lib.get_st(nodes_list,im)
+        
     return (list_res,list_files)        
     #print [(n.get_value(),n._age,n._uses) for n in tree.get_root().preorder()]
     
@@ -848,7 +917,132 @@ def split_input(options,args,fields,dim,types,dict_dim, otfa = lambda x: x.get_r
         for j in lines[cuts[i]:cuts[i+1]]:
             f.write(j)
         f.close()
+        
+def build_stability_aggregation_trees(options,args,fields,dim,types,dict_dim, otfa = lambda x,y: x.get_root(),randomize=False,no_final_aggregation=False):
+    
+    #TODO: remove nof_final aggregtion parameter and replace it by the test below
+    if not options.aggregate>0:
+        no_final_aggregation = True
+    
+    tree_src = None
+    tree_dst = None
+   
+    list_res = []
+    list_window = []
+    tree = None
+    f = open(options.input) 
+    lines = [ l for l in f]
+    f.close()
+    
+    if randomize: random.shuffle(lines)
+    
+    total_count = 0.0
+    current_window = 0
+    
+    for line in lines:
+        #print line
+        find = re.search(options.reg_exp,line)
+        #print find
+        if find:
+            dict_fields = {}
+            for i in range(len(fields)):
+                dict_fields[fields[i]] = find.group(i+1)
+            #print dict_fields
+            try:
+                #    print dict_fields["timestamp"]
+                sec = time.mktime(time.strptime(dict_fields["timestamp"],"%Y-%m-%d %H:%M:%S"))
+            except:
+                sec = int(dict_fields["timestamp"])
+
+            if sec >= current_window + options.window: 
+                if tree != None:
+                    list_res.append((tree,total_count))
+                    tree = Tree(dim)
+                    current_window = current_window + options.window
+                    
+                    while sec>= current_window + options.window:
+                        list_res.append((None,0.0))
+                        list_window.append(current_window)
+                        current_window = current_window + options.window
+                    
+                else:
+                    tree = Tree(dim)
+                    current_window = sec
+                total_count = 0.0
+                
+                list_window.append(current_window)
+                
+            try:    
+                update_tree(tree,dict_fields,dict_dim,options.type_aggr)
+            except Exception, e:
+                print e
+                raise
+                tree.set_root(tree.get_root().post_aggregate())
+                update_tree(tree,dict_fields,dict_dim,options.type_aggr)
+            total_nodes = len(tree.get_root().preorder())
+            if total_nodes > options.max_nodes:
+                tree.set_root(otfa(tree,total_count))
+                tree.set_root(tree.get_root().post_aggregate())
+                #aggregate_LRU(tree,options.max_nodes,options.aggregate,total_count)
             
+            #print tree.get_root().preorder()
+            #tree.increase_age_tree()
+            
+            total_count+= float(dict_fields[VALUE])
+            
+            map(lambda x: x.increase_age(),tree.get_root().preorder())
+    
+    if tree.get_root() != None:
+        list_res.append((tree,total_count))
+    
+    
+   
+    #sys.exit()
+    i = 0
+    list_files = []
+    if len(options.strategy) > 0:
+        sname = "_%s" % options.strategy
+    else:
+        sname = ""
+        
+    ts = []
+    for (res_t,res_c) in filter(lambda x: x[0]!=None,list_res):
+        ts.append({'tree':res_t, 'res_c':res_c})
+    for t in ts:
+        t['tree'].aggregate(options.aggregate,t['res_c']) 
+    agt = [t['tree'] for t in ts ] 
+    pat = [t['tree'].get_root().post_aggregate() for t in ts ]
+    nodes_list = [r.preorder() for r in pat]
+    im = similarity_lib.imatrix(nodes_list)
+    st = similarity_lib.get_st(nodes_list, im)
+    i = 0
+    for tk in st.keys():
+        t = agt[tk]
+        tree_nodes = t.preorder()
+        for n in tree_nodes:
+            if options.shighlight == "Average":
+                n._stability = sum(st[tk][tree_nodes.index(n)])/float(len(st[tk][tree_nodes.index(n)]))
+            else:
+                n._stability = min(st[tk][tree_nodes.index(n)])
+        #print t.dot_preaggregate(ts[tk]['res_c'],stability_highlight,"Node")
+        fwrite = open("%s.%s.dot"%(options.input.replace(".txt",''),i),"w")
+        fwrite.write(t.dot_preaggregate(ts[i]['res_c'],options.shighlight,options.ahighlight))
+        fwrite.close()
+        try:
+            dot_file = "%s.%s.dot"%(options.input.replace(".txt",''),i)
+            print dot_file
+            print type(dot_file)
+            gvv = gv.read(dot_file)
+            gv.layout(gvv,'dot')
+          
+            new_file_gv = "%s.%s_%s_%s.png"%(options.input.replace(".txt",''),i,options.aggregate,sname)
+            list_files.append(new_file_gv)
+            gv.render(gvv,'png',new_file_gv)
+        except Exception, e:
+            print e
+            print "No Rendering"
+        i= i +1
+    return (list_res,list_files)            
         
 def main_aggregator(lineparser):
     options, args = lineparser.parse_args()
@@ -865,13 +1059,15 @@ def main_aggregator(lineparser):
  
     dict_dim = {}
     
+    from_gui = True
+    if __name__ == "__main__":
+        from_gui = False
+    
     if len(dim) != len(types):
         raise Exception("The number of defined dimensions and types has to be equal")
     else:
         for i in range(len(dim)):
             dict_dim[dim[i]] = types[i]
-
-            
     res = None
     
     if len(options.strategy) > 0 :         
@@ -880,12 +1076,16 @@ def main_aggregator(lineparser):
             fun = getattr(sys.modules[__name__],method_name)
         except:
             raise Exception("Strategy not implemented %s"%options.strategy)
-        res = fun(options,args,fields,dim,types,dict_dim)
-    
+        print fun.__name__
+        res = fun(options,args,fields,dim,types,dict_dim,from_gui)
+    elif options.shighlight:
+        res = build_stability_aggregation_trees(options,args,fields,dim,types,dict_dim)
     else:
-        res = build_aggregate_tree(options,args,fields,dim,types,dict_dim)
-    return res
 
+        res = build_aggregate_tree(options,args,fields,dim,types,dict_dim,from_gui=False)
+    return res
+    
+ 
 
 if __name__ == "__main__":
     sys.setrecursionlimit(1000000)
@@ -904,8 +1104,10 @@ if __name__ == "__main__":
     lineparser.add_option('-g','--type-aggregation', dest='type_aggr', default="NumericalValueNode",type='string',help="type of the aggregation for nodes")   
     
     lineparser.add_option('-n','--name', dest='namefile', default="bytes",type='string',help="suffix for name of file results")    
-    lineparser.add_option('-S','--strategy', dest='strategy', default="",type='string',help="strategy for selecting nodes to aggregate")
-    lineparser.add_option('-m','--max-nodes', dest='max_nodes', default=99999,type='int',help="max size of tree")
+    lineparser.add_option('-S','--strategy', dest='strategy', default="",type='string',help="stratrgy for selecting nodes to aggregate")
+    lineparser.add_option('-m','--max-nodes', dest='max_nodes', default=999999999,type='int',help="max size of tree")
+    lineparser.add_option('-A','--aggregation-highlight', dest='ahighlight', default=None,type='string',help="Highligh nodes on behalf aggregation")
+    lineparser.add_option('-T','--stability-highlight', dest='shighlight', default=None,type='string',help="Highligh nodes on behalf node stability")
     
     main_aggregator(lineparser)
     

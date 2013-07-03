@@ -1,5 +1,5 @@
 import re
-        
+import IPy
 class Tree:
     """
     A class representing a tree, this is a wrapper for a node which is also a tree
@@ -57,10 +57,12 @@ class Tree:
         """Display the tree after having been aggregated"""
         return self._root.display_preaggregate(total,0)[0]
 
-    def dot_preaggregate(self,total):
+    def dot_preaggregate(self,total,sh=True,ah="Node"):
         """Display the tree after having been aggregated"""
+        '''sh is stability highlighting'''
+        '''ah is aggregation highlighting'''
         res = "digraph G {\n node [shape=record];"
-        res += self._root.dot_preaggregate(total,0,1)[0]
+        res += self._root.dot_preaggregate(total,0,1,sh,ah)[0]
         res += "}"
         return res
         
@@ -90,6 +92,7 @@ class Node:
         self._aggrValue = self.getDefaultAggr()
         self._age = 0
         self._uses = 0
+        self._stability = 1.0
         
         
         
@@ -127,6 +130,9 @@ class Node:
     def update_value(self,value_to_add):
         raise NotImplementedError
     
+    def final_node(self):
+        return all([self.get_key()[k].final_node() for k in self.get_key().keys()])
+        
     def get_age(self):
         return self._age
     
@@ -230,12 +236,11 @@ class Node:
         
         #Display the current node
         
-        toDisplay = "["
+        #toDisplay = "["
         for k in self.get_tree().get_dim():
             #toDisplay = toDisplay + str(k) +"-->"+Types.display(self.get_key()[k],v)+" "
-            toDisplay = toDisplay + str(k) +"-->"+self.get_key()[k].display()+" "
-            
-        toDisplay = toDisplay + "]"
+            toDisplay = toDisplay + self.get_key()[k].display()+" "
+        #toDisplay = toDisplay + "]"
         toDisplay += " "+str(int(percent))+" ("+"%.2f" % (100.0*percent/total)+"% / "+"%.2f" % (100.0*percent2/total)+"%)  "#+ "%.2f" % (100.0*self.get_aggr_value()/total)+"%"
         
         indent = "   "*level
@@ -244,7 +249,7 @@ class Node:
         return current_str,aggr_all+self.get_value()
         
         
-    def dot_preaggregate(self,total,level,ind):
+    def dot_preaggregate(self,total,level,ind,sh=True,ah="Node"):
         """
         Display a node which was previously aggregated
         total is the total value in the tree (for %)
@@ -259,7 +264,7 @@ class Node:
         #Dsiplay the children and get the aggregated values which are summed up
         for c in self.get_children():
             dot += str(ind) +" -> "+str(indChild)+";\n"
-            res,aggr,indNew = c.dot_preaggregate(total,level+1,indChild)
+            res,aggr,indNew = c.dot_preaggregate(total,level+1,indChild,sh,ah)
             indChild = indNew +1
             aggr_all += aggr
             intern_str += res
@@ -280,7 +285,18 @@ class Node:
         #dot+= "{"+"age: %s|uses: %s}|" % (self._age,self._uses)   
         #toDisplay = toDisplay + "]"
         dot+="{"+"%.2f" % (100.0*percent/total)+"%|"+"%.2f" % (100.0*percent2/total)+"%}}\"]\n"
-       
+        if ah == "Node":
+            ns = sorted(list(set([k.get_value() for k in self.get_tree().get_root().preorder()])))
+            mx = ns[-1]
+            dot+='''%s [fontsize = "%s"]\n'''% (str(ind),14+22 * percent/mx)
+            
+        if ah == "Accumulated":
+            dot+='''%s [fontsize = "%s"]\n'''% (str(ind),14+22 * percent2/total)
+        
+        if sh and self.final_node():
+            sc= "#FF0000%x"% (125*(1-self._stability)+50)
+            #print self._stability,sc
+            dot+='''%s [style="filled" fillcolor = "%s"]'''% (str(ind),sc)
         
        
         current_str = dot+" \n "+intern_str
@@ -350,7 +366,9 @@ class Node:
         return current_str,aggr_all+self.get_value(),indChild
     
     def intern_preorder(self,children,dim):
-        if len(dim) == 0:
+        if len(dim) == 0 and not children:
+            return []
+        if len(dim) == 0 and children:
             return children.preorder()
         else:
             d = dim[0]
@@ -409,7 +427,7 @@ class Node:
             return 0.0, [], [],0.0
             
     def aggregate(self,threshold,total,level=0,keep_root=False):
-
+        #print "a"
         if total == 0:
             print "Total : 0"
         try:
@@ -526,6 +544,8 @@ class Node:
     
     @staticmethod
     def create_children_tree(dim,common_prefix,node1,node2,nodes):
+       
+        
        
         children = {}
         if len(dim) == 0 and len(nodes) > 1:
@@ -789,7 +809,146 @@ class Node:
                     explore[0][explore[1]].insert_node(node,dim)
 
             self.increment_uses()
+
+    def get_insert_path(self,node,dim):
+        """Insert a node in the current tree"""
+        
+        same_node = True
+        final_node = True
+        
+        
+        #compute the common prefix of each dimension
+        common_prefix = {}
+        
+        for k in dim:
             
+            #get node keys for this dimension
+            val1 = self.get_key()[k]
+            val2 = node.get_key()[k]
+            
+            #compute common prefix
+            common_prefix[k] = val1.common_prefix(val2)
+            
+            
+            #check if the prefix is exactly the same (prefix corresponds to a final node)
+            if not common_prefix[k].final_node():
+                same_node = False
+        
+            if not self.get_key()[k].final_node():
+                final_node = False
+        
+        #~ for k,v in common_prefix.items():
+            #~ print k,v
+        
+        if final_node:
+            #If it's exactly the same node and it's not an internal, juste update the value
+            if same_node:
+                return []
+            #Else, create a new branching point with the common prefix
+            else:
+                children = Node.create_children_tree(dim,common_prefix,self,node,[self,node])
+                
+                #introspection to create a node of the same type
+                #className = self.__class__.__name__
+                branching_point = globals()[className](common_prefix,0,children,self.get_tree(),self.get_parent())
+                
+                #update the root tree if necessary
+                #if self == self.get_tree().get_root():
+                #    self.get_tree().set_root(branching_point)
+                    
+                if self == self.get_tree().get_root():
+                    return [self]
+                else:
+                    #Order of operation is very important:
+                    #1) remove old children
+                    #2)create the new internal tree
+                    
+                    #remove the old children (now a child of the branching point)
+                    explore = self.get_parent().explore_intern(dim,self.get_key())
+                    explore[0][explore[1]] = None
+                    
+                    #update parent's children
+                    #not optimized --> normally it's not necessary to recompute the internal path of the parent
+                    #need to add some additional attribute to node
+                    #print "la", branching_point.get_children()
+                    
+                    return [self.get_parent(),self.get_parent().explore_intern(dim,branching_point.get_key()),branching_point]
+                    #~ print self.get_parent().get_children(),Types.IntToDottedIP(branching_point.get_key()['src_ip'][1]),\
+                    #~ Types.IntToDottedIP(self.get_parent().get_key()['src_ip'][1]),Types.IntToDottedIP(self.get_key()['src_ip'][1]),\
+                    #~ Types.IntToDottedIP(node.get_key()['src_ip'][1])
+                    
+                    #print Types.subprefix(self.get_parent().get_key()['src_ip'],node.get_key()['src_ip'],'ip_addr')
+                    
+                    
+                    
+                
+        
+        #if the current node is an internal node
+        else:
+            
+            #explore internal subtree to find where to put the new node
+            explore = self.explore_intern(dim,node.get_key())
+            """print "UUUUUU", 
+            print self.display_key()
+            a = explore[0][explore[1]]
+            
+            if a != {}:
+                print "--",a.display_key()
+            else:
+                print explore"""
+            #if the new node is not a subpart, create a branching point
+            #print node.get_key()['geo1'],explore
+            #~ if node.get_key()['geo1']._minval == 2 and node.get_key()['geo1']._maxval == 2 and node.get_key()['geo2']._minval ==4 and node.get_key()['geo2']._maxval == 4:
+                #~ print self.get_key()['geo1'],self.get_key()['geo2'],explore
+                #~ for k,v in explore[0].items():
+                    #~ print "-->",k,v.get_key()['geo1'],v.get_key()['geo2']
+                    
+                
+            if explore == None:
+                #update common prefix
+                #the length of the prix has to be higher because we go up in the tree
+                
+                children = Node.create_children_tree(dim,common_prefix,self,node,[self,node])
+                
+                #~ if node.get_key()['geo1']._minval == 2 and node.get_key()['geo1']._maxval == 2 and node.get_key()['geo2']._minval ==6 and node.get_key()['geo2']._maxval == 6:
+                    #~ print children, node
+                #~ 
+                className = self.__class__.__name__
+                branching_point = globals()[className](common_prefix,0,children,self.get_tree(),self.get_parent())
+             
+                
+                if self == self.get_tree().get_root():
+                    return [self,branching_point]
+                else:
+                    #Order of operation is very important:
+                    #1) remove old children
+                    #2)create the new internal tree
+                    
+                    #remove the old children (now a child of the branching point)
+                    explore = self.get_parent().explore_intern(dim,self.get_key())
+                    explore[0][explore[1]] = None
+
+                    #update parent's children
+                    #not optimized --> normally it's not necessary to recompute the internal path of the parent
+                    #need to add some additional attribute to node
+                    #print "la", branching_point.get_children()
+                    
+                     
+                    return [self.get_parent(),branching_point]
+                    
+                
+                
+            #Else put the new node as a children as the right place
+            else:
+                #if there is no previous node at this place, put the new one
+                if explore[0][explore[1]] == {} or explore[0][explore[1]] == None :                   
+                    return [self]
+                #else insert the new node in the subtree by a recursive call
+                else:
+                    return explore[0][explore[1]].get_insert_path(node,dim)
+
+            #self.increment_uses()
+        
 class NumericalValueNode(Node):
     """
     Implementation of a Node class with numeric values and standard addition as aggregation

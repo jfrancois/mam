@@ -31,9 +31,10 @@ app.MainLoop()
 
 class MainWindow(wx.Frame):
     def __init__(self, parent, title):
-        wx.Frame.__init__(self, parent, title=title, size=(800,600))
+        wx.Frame.__init__(self, parent, title=title, size=(850,600))
         #0s elf.control = wx.TextCtrl(self, style=wx.TE_MULTILINE)
         self.CreateStatusBar() # A Statusbar in the bottom of the window
+
         
         self.features = []
         for mod in inspect.getmembers(features,inspect.ismodule):
