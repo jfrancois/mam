@@ -1,8 +1,10 @@
-Authors : Lautaro Dolberg, Jerome Francois, Thomas Engel (first.second@uni.lu)
-Date : 17/08/2012
+Authors : Lautaro Dolberg (1), Jerome Francois (2), Thomas Engel (1)
+Initial version: 17/08/2012
+Last update: 05/07/2016
 All rights reserved
 GPL version 2.0 to be found at: http://www.gnu.org/licenses/gpl-2.0.txt
-2012 University of Luxembourg - Interdisciplinary Centre for Security Reliability and Trust (SnT)
+(1) University of Luxembourg - Interdisciplinary Centre for Security Reliability and Trust (SnT), firstname.last@uni.lu
+(2) Inria Nancy Grand Est, jerome.francois@inria.fr
 
 This tool constructs aggregated trees representing DNS - IP address match which can be then analyzed for figuring out the stability of this mapping
 
